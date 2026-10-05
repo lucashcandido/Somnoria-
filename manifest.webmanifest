@@ -1,0 +1,11 @@
+{
+  "name": "Somnoria – Der Traum im Englischunterricht",
+  "short_name": "Somnoria",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#140d24",
+  "theme_color": "#140d24",
+  "icons": [{ "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }, { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }]
+}
