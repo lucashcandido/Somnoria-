@@ -141,7 +141,7 @@ kbd.cd{opacity:.35}
 <body>
 <canvas id="c"></canvas>
 <div id="hud"></div>
-<div id="tap" class="ov on"><h1>Somnoria</h1><p>Loading …</p><small>Two-player co-op · Connect two controllers in your Bluetooth settings first</small><small id="offline"></small><small id="ver" style="opacity:.55">Version 3.0</small></div>
+<div id="tap" class="ov on"><h1>Somnoria</h1><p>Loading …</p><small>Two-player co-op · Connect two controllers in your Bluetooth settings first</small><small id="offline"></small><small id="ver" style="opacity:.55">Version 3.1</small></div>
 <div id="title" class="ov"><h1>Somnoria</h1><div class="sub">The Dream in English Class</div><div class="tmenu"></div></div>
 <div id="join" class="ov"><h2>Who's joining the dream?</h2>
   <div class="jrow">
@@ -427,8 +427,8 @@ const SURF_DEF = {
   cloth:    ['cloth',    1.30, 0.50, 10, 0.9, 0.9],
   skin:     ['soft',     0.90, 0.55, 26, 0.5, 0.8],
   soft:     ['soft',     0.60, 0.50, 22, 0.6, 1.0],
-  curls:    ['curls',    1.70, 0.90, 26, 1.3, 1.0],
-  hair:     ['hair',     1.20, 1.20, 48, 1.0, 1.0],
+  curls:    ['curls',    1.70, 0.38, 16, 1.3, 1.0],
+  hair:     ['hair',     1.20, 0.55, 30, 1.0, 1.0],
   ice:      ['ice',      0.30, 1.60, 90, 0.9, 1.0],
   tiles:    ['tiles',    0.3333, 0.90, 36, 1.0, 1.0],
   chalk:    ['chalk',    0.50, 0.15, 8, 0.8, 1.0],
@@ -622,7 +622,7 @@ function surfIdOf(m) { const s = m.userData.surf; return SURF[s] !== undefined ?
 GFX.terrainMat = function () {
   const m = new THREE.MeshPhongMaterial({ vertexColors: true, specular: 0x8a8a8a }); if (!this.enabled) return m;
   const lin = (hex) => new THREE.Color(hex); const L = this.layerIdx;
-  const U = { gNoise: { value: this.maps.noise }, gGrassC: { value: lin(0x628f3c) }, gDirtC: { value: lin(0x9c7c58) }, gRockC: { value: lin(0xa9a59d) }, gSandC: { value: lin(0xd9c898) }, gSnowC: { value: lin(0xf2f6fb) } };
+  const U = { gNoise: { value: this.maps.noise }, gGrassC: { value: lin(0x5a8339) }, gDirtC: { value: lin(0x9c7c58) }, gRockC: { value: lin(0xa9a59d) }, gSandC: { value: lin(0xd9c898) }, gSnowC: { value: lin(0xf2f6fb) } };
   m.defines = { GFX_NORMALS: 1 };
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, this.U, U);
@@ -1171,6 +1171,18 @@ function chunkedInstances(geo, mat, items, size, setup) {
 }
 
 Object.assign(World, {
+  // Small ground cover far from a player is not drawn in that player's view (layer 1 = Martina's camera, 2 = Lucas's).
+  cull: [],
+  distCull(players) {
+    const on = G.mode === 'play' && players.length === 2 && !window.__fullView;
+    players.forEach((p, i) => { p.camera.layers.mask = 1 | (2 << i); });
+    for (const m of this.cull) {
+      let mask = 1;
+      if (on) { const b = m.geometry.boundingSphere, c = b.center, lim = m.userData.cullD + b.radius;
+        const v0 = Math.hypot(c.x - players[0].x, c.z - players[0].z) < lim, v1 = Math.hypot(c.x - players[1].x, c.z - players[1].z) < lim; mask = v0 && v1 ? 1 : v0 ? 2 : v1 ? 4 : 8; }
+      if (m.layers.mask !== mask) m.layers.mask = mask;
+    }
+  },
   buildTerrain() {
     const W = GRID + 1; const H = this.heights = new Float32Array(W * W);
     for (let iz = 0; iz < W; iz++) for (let ix = 0; ix < W; ix++) H[iz * W + ix] = rawHeight(-WORLD_HALF + ix * CELL, -WORLD_HALF + iz * CELL);
@@ -1375,7 +1387,7 @@ Object.assign(World, {
       const reg = regionAt(x, z); if (reg === 'tower' || r() > (reg === 'forest' ? 0.5 : 0.8)) continue; bushes.push({ x, z, y: h, s: R(0.8, 1.5), rot: R(0, TAU), hue: R(-0.03, 0.04), l: R(-0.05, 0.05), forest: reg === 'forest' });
     }
     const q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color(), up = new THREE.Vector3(0, 1, 0);
-    const place = (geo, mat, items, colFn, lift = 0, cast = false) => { for (const m of chunkedInstances(geo, mat, items, 60, (t, i, inst, mm) => { q.setFromAxisAngle(up, t.rot); s.setScalar(t.s); p.set(t.x, t.y + lift, t.z); mm.compose(p, q, s); inst.setMatrixAt(i, mm); colFn(t, c); inst.setColorAt(i, c); })) { m.receiveShadow = true; m.castShadow = cast; this.group.add(m); } };
+    const place = (geo, mat, items, colFn, lift = 0, cast = false) => { for (const m of chunkedInstances(geo, mat, items, 60, (t, i, inst, mm) => { q.setFromAxisAngle(up, t.rot); s.setScalar(t.s); p.set(t.x, t.y + lift, t.z); mm.compose(p, q, s); inst.setMatrixAt(i, mm); colFn(t, c); inst.setColorAt(i, c); })) { m.receiveShadow = true; m.castShadow = cast; m.userData.cullD = 95; this.cull.push(m); this.group.add(m); } };
     place(cross(1.15, 0.85, 1.0), GFX.cardMat('grass', { wind: 0.14 }), tufts, (t, c) => c.setHSL(t.tint[0], t.tint[1], t.tint[2] + t.l), -0.06);
     place(cross(0.9, 0.8, 1.0, 0.1), GFX.cardMat('flower', { wind: 0.10 }), flowers, (t, c) => t.white ? c.setRGB(1, 1, 1) : c.setHSL(t.hue, 0.85, 0.72), -0.03);
     place(cross(1.5, 1.0, 0.6, 0.5), GFX.cardMat('fern', { wind: 0.08 }), ferns, (t, c) => c.setHSL(0.30, 0.5, 0.36), -0.05);
@@ -1383,9 +1395,9 @@ Object.assign(World, {
     { const cards = new Cards(); const rb = mulberry32(8);
       for (let i = 0; i < 16; i++) { const u = rb() * TAU, v = Math.acos(rb()); const dx = Math.sin(v) * Math.cos(u), dy = Math.cos(v), dz = Math.sin(v) * Math.sin(u); const f = new THREE.Vector3(dx + (rb() - 0.5), dy + rb() * 0.5, dz + (rb() - 0.5)).normalize(); const a = new THREE.Vector3(rb() - 0.5, rb() - 0.5, rb() - 0.5); const uu = new THREE.Vector3().crossVectors(f, a).normalize(), vv = new THREE.Vector3().crossVectors(f, uu); const sz = 0.62; cards.quad(dx * 0.62, 0.42 + dy * 0.5, dz * 0.62, uu.x * sz, uu.y * sz, uu.z * sz, vv.x * sz, vv.y * sz, vv.z * sz, dx * 0.7, 0.3 + dy * 0.7, dz * 0.7, 0.25, 0.25); }
       const bm = GFX.cardMat('bush', { wind: 0.06 }); const dm = GFX.depthCard('bush');
-      for (const m of chunkedInstances(cards.build(), bm, bushes, 60, (t, i, inst, mm) => { q.setFromAxisAngle(up, t.rot); s.setScalar(t.s); p.set(t.x, t.y, t.z); mm.compose(p, q, s); inst.setMatrixAt(i, mm); c.setHSL(0.29 + t.hue, 0.5, (t.forest ? 0.30 : 0.40) + t.l); inst.setColorAt(i, c); })) { m.castShadow = true; m.receiveShadow = true; m.customDepthMaterial = dm; this.group.add(m); }
+      for (const m of chunkedInstances(cards.build(), bm, bushes, 60, (t, i, inst, mm) => { q.setFromAxisAngle(up, t.rot); s.setScalar(t.s); p.set(t.x, t.y, t.z); mm.compose(p, q, s); inst.setMatrixAt(i, mm); c.setHSL(0.29 + t.hue, 0.5, (t.forest ? 0.30 : 0.40) + t.l); inst.setColorAt(i, c); })) { m.castShadow = true; m.receiveShadow = true; m.customDepthMaterial = dm; m.userData.cullD = 135; this.cull.push(m); this.group.add(m); }
       const core = new THREE.RawIcosahedronGeometry(0.62, 1); core.translate(0, 0.4, 0); core.scale(1, 0.8, 1);
-      for (const m of chunkedInstances(core, LM({ color: 0x1f3a1a, surf: 'leaves' }), bushes, 60, (t, i, inst, mm) => { q.setFromAxisAngle(up, t.rot); s.setScalar(t.s); p.set(t.x, t.y, t.z); mm.compose(p, q, s); inst.setMatrixAt(i, mm); })) { m.castShadow = true; m.receiveShadow = true; this.group.add(m); }
+      for (const m of chunkedInstances(core, LM({ color: 0x1f3a1a, surf: 'leaves' }), bushes, 60, (t, i, inst, mm) => { q.setFromAxisAngle(up, t.rot); s.setScalar(t.s); p.set(t.x, t.y, t.z); mm.compose(p, q, s); inst.setMatrixAt(i, mm); })) { m.castShadow = true; m.receiveShadow = true; m.userData.cullD = 135; this.cull.push(m); this.group.add(m); }
     }
   },
 });
@@ -3783,10 +3795,10 @@ function updateEffects(dt) {
     e.life -= dt; const T = e.type;
     if (T === 'rune') {
       const k = clamp(1 - e.life / e.max, 0, 1), pop = 1 - Math.pow(1 - Math.min(1, k * 5), 3), fade = clamp(e.life / 0.4, 0, 1);
-      e.rot += dt * 0.7; FX.uv(e.m, 0.55 + 0.45 * pop, e.rot); e.m.material.uniforms.opacity.value = fade * (0.88 + 0.12 * Math.sin(G.t * 9));
-      e.col.scale.set(1.2 + 0.5 * k, 2 + 6 * pop, 1.2 + 0.5 * k); e.col.rotation.y -= dt * 1.5; e.col.material.uniforms.opacity.value = fade * 0.6 * (1 - k * 0.5);
+      e.rot += dt * 0.7; FX.uv(e.m, 0.55 + 0.45 * pop, e.rot); e.m.material.uniforms.opacity.value = fade * (0.55 + 0.08 * Math.sin(G.t * 9));
+      e.col.scale.set(1.2 + 0.5 * k, 2 + 6 * pop, 1.2 + 0.5 * k); e.col.rotation.y -= dt * 1.5; e.col.material.uniforms.opacity.value = fade * 0.34 * (1 - k * 0.5);
       for (let i = fxN(dt, 70 * fade); i > 0; i--) { const a = Math.random() * TAU, r = Math.sqrt(Math.random()) * 6.8; Pt.emit(e.x + Math.cos(a) * r, e.y + rnd(0.1, 0.5), e.z + Math.sin(a) * r, 0, rnd(1, 2.6), 0, i % 3 ? 0x8dffb8 : 0xf4ffb0, rnd(0.12, 0.24), rnd(0.6, 1.1), 5, -1.2, 1); }
-      Lights.flash(e.x, e.y + 2, e.z, 0x7dffb0, 2.4 * fade, 17);
+      Lights.flash(e.x, e.y + 2, e.z, 0x7dffb0, 1.2 * fade, 14);
     }
     if (T === 'tele') {
       const k = 1 - e.life / e.max; e.rot += dt * 0.5; FX.uv(e.fill, Math.min(1, k), 0); FX.uv(e.m, 1, e.rot); e.fill.material.uniforms.opacity.value = 0.55 + 0.45 * clamp(k, 0, 1); e.m.material.uniforms.opacity.value = k > 0.65 ? 0.72 + 0.28 * Math.sin(G.t * 34) : 0.92;
@@ -3802,10 +3814,10 @@ function updateEffects(dt) {
     }
     if (T === 'pillar') {
       const f = e.follow; if (f) { e.x = f.x; e.y = f.y; e.z = f.z; } const k = clamp(1 - e.life / e.max, 0, 1), o = Math.sin(Math.PI * Math.sqrt(k)), c = e.color || 0xffe066, r = e.r * (1.15 - 0.35 * k);
-      e.m.position.set(e.x, e.y, e.z); e.m.scale.set(r, e.h * (0.35 + 0.65 * Math.min(1, k * 3)), r); e.m.rotation.y += dt * 2.5; e.m.material.uniforms.opacity.value = o * 0.65;
-      e.fill.position.set(e.x, e.y + 0.1, e.z); e.fill.scale.set(e.r * 1.7, 1, e.r * 1.7); e.fill.rotation.y -= dt * 2; e.fill.material.uniforms.opacity.value = o;
+      e.m.position.set(e.x, e.y, e.z); e.m.scale.set(r, e.h * (0.35 + 0.65 * Math.min(1, k * 3)), r); e.m.rotation.y += dt * 2.5; e.m.material.uniforms.opacity.value = o * 0.4;
+      e.fill.position.set(e.x, e.y + 0.1, e.z); e.fill.scale.set(e.r * 1.7, 1, e.r * 1.7); e.fill.rotation.y -= dt * 2; e.fill.material.uniforms.opacity.value = o * 0.6;
       for (let i = fxN(dt, 45 * o); i > 0; i--) { const a = Math.random() * TAU, q = rnd(0.2, 1) * e.r; Pt.emit(e.x + Math.cos(a) * q, e.y + rnd(0, 0.6), e.z + Math.sin(a) * q, 0, rnd(2, 4.5), 0, c, rnd(0.1, 0.2), rnd(0.5, 0.9), 5, -2, 0.8); }
-      Lights.flash(e.x, e.y + 1.6, e.z, c, 1.8 * o, 10);
+      Lights.flash(e.x, e.y + 1.6, e.z, c, 0.9 * o, 9);
     }
     if (e.life <= 0) { FX.give(e.m); FX.give(e.fill); FX.give(e.col); e.m = e.fill = e.col = null; }
   }
@@ -5063,6 +5075,9 @@ const Story = {
   applySave(d) {
     Object.assign(G.flags, d.flags || {}); const items = Object.assign({}, G.party.items, (d.party || {}).items); Object.assign(G.party, d.party || {}); G.party.items = items;
     Object.assign(G.stats, d.stats || {}); if (d.appearance) G.appearance = d.appearance; if (d.checkpoint) G.checkpoint = d.checkpoint;
+    // saves from the German version carry German place names
+    const DE = { 'Blumenwiese': 'Flower Meadow', 'Turmspitze': 'Tower Top', 'Vor dem Turm': 'Tower Gate', 'Dorfbrunnen': 'Village Well', 'Prüfungsraum': 'Exam Hall', 'Ruineneingang': 'Ruin Entrance', 'Kleckshafen': 'Port Blot', 'Basislager': 'Base Camp', 'Turmplatz': 'Tower Square', 'Ruine der Vokabeln': 'Ruins of Vocabulary', 'Versunkene Bibliothek': 'Sunken Library', 'Glockengipfel': 'Bell Peak', 'Dunkler Magieturm': 'Dark Magic Tower' };
+    const cn = G.checkpoint && G.checkpoint.name; if (cn) { const base = cn.replace(' (Eingang)', ''); if (DE[base]) G.checkpoint.name = DE[base] + (cn !== base ? ' (Entrance)' : ''); }
     G.got = new Set(d.got || []); Dungeon.deserialize(d.dungeons);
   },
   // apply flags to the world (new game or loaded)
@@ -5516,12 +5531,13 @@ const Render = {
     if (c.right !== r) { c.left = -r; c.right = r; c.top = r; c.bottom = -r; c.updateProjectionMatrix(); }
     s.target.position.set(x, y, z); s.position.set(x + this.sunDir.x * 130, y + this.sunDir.y * 130, z + this.sunDir.z * 130); s.target.updateMatrixWorld(); s.updateMatrixWorld();
   },
-  renderView(cam, v, p) {
+  // keepShadow: reuse the shadow map the previous view just drew (both players stand close together)
+  renderView(cam, v, p, keepShadow, wide) {
     if (window.__norender) return;
     const h = window.innerHeight; renderer.setViewport(v.x, h - v.y - v.h, v.w, v.h); renderer.setScissor(v.x, h - v.y - v.h, v.w, v.h);
     cam.aspect = v.w / v.h; cam.updateProjectionMatrix(); World.sky.position.copy(cam.position);
-    if (p) this.aim(p.x, p.y, p.z, p.x > 800 ? 30 : 42); else this.aim(cam.position.x, 0, cam.position.z - 40, 90);
-    renderer.render(scene, cam);
+    if (p) this.aim(p.x, p.y, p.z, (p.x > 800 ? 30 : 42) + (wide ? 8 : 0)); else this.aim(cam.position.x, 0, cam.position.z - 40, 90);
+    renderer.shadowMap.autoUpdate = !keepShadow; renderer.render(scene, cam); renderer.shadowMap.autoUpdate = true;
   },
   full(cam) { if (window.__norender) return; const w = window.innerWidth, h = window.innerHeight; renderer.setViewport(0, 0, w, h); renderer.setScissor(0, 0, w, h); cam.aspect = w / h; cam.updateProjectionMatrix(); World.sky.position.copy(cam.position); this.aim(0, 4, 20, 110); renderer.render(scene, cam); },
   applyTitle() { World.sky.visible = true; if (World.setSkyMood) World.setSkyMood(0); },
@@ -5728,8 +5744,14 @@ function frame(now) {
   G.players.forEach(p => updateCamera(p, dt));
   Render.applyArea();
   GFX.time.value = G.t; Render.autoTune(dt); Lights.update(G.players, G.t);
+  World.distCull(G.players);
   if (window.__fullView && G.players.length) { const p = G.players[0], o = window.__camOverride; World.hideOccluders(null); Render.renderView(p.camera, { x: 0, y: 0, w: window.innerWidth, h: window.innerHeight }, o ? { x: o.look[0], y: o.look[1], z: o.look[2] } : p); return; }
-  if (G.players.length) G.players.forEach((p, i) => { World.hideOccluders(p.camera, p.x, p.z); Render.renderView(p.camera, vps[i], p); });
+  if (!G.players.length) return;
+  // one shadow map serves both views while the two stand close together (saves a whole shadow pass per frame)
+  const a = G.players[0], b = G.players[1]; const gap = b ? Math.hypot(a.x - b.x, a.z - b.z) : 1e9;
+  Render._shared = !!b && Math.abs(a.y - b.y) < 10 && gap < (Render._shared ? 28 : 24);
+  const mid = Render._shared ? (Render._mid || (Render._mid = { x: 0, y: 0, z: 0 })) : null; if (mid) { mid.x = (a.x + b.x) / 2; mid.y = (a.y + b.y) / 2; mid.z = (a.z + b.z) / 2; }
+  G.players.forEach((p, i) => { World.hideOccluders(p.camera, p.x, p.z); Render.renderView(p.camera, vps[i], mid || p, !!mid && i > 0, !!mid); });
 }
 
 function gameUpdate(dt) {
